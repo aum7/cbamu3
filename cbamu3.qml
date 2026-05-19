@@ -31,8 +31,9 @@ MuseScore {
   property bool showFingering: false
   // fingering checkbox double-click
   property var lastClickTime: 0
-  property bool showTreble: false
+  property var doubleClickSpeed: 700
   
+  property bool showTreble: false
   property int bassOctaveShift
   
   property int rowLeftMargin: 7
@@ -270,7 +271,7 @@ MuseScore {
   }
 
   function hideFinger() {
-    console.log("dbg : inside hideFinger ...")
+    // console.log("hideFinger : inside ...")
     // hide fingering markings on treble staff
     if (!curScore || curScore.selection.elements.length === 0) return
     // start command
@@ -301,8 +302,8 @@ MuseScore {
   }
 
   function calcFinger(requestAlternate) {
-    var selectedRange = curScore.selection.elements.length
-    console.log("calcFinger : selected=", selectedRange, " | requestAlternate=", requestAlternate)
+    // var selectedLength = curScore.selection.elements.length
+    // console.log("calcFinger : initial selectedLength=", selectedLength)
     if (!curScore || curScore.selection.elements.length === 0) return
     // wrap into command
     curScore.startCmd()
@@ -312,7 +313,7 @@ MuseScore {
     // gather melody line data
     var notesSequence = []
     var cursor = curScore.newCursor()
-    cursor.rewind(Cursor.SELECTION_START) // todo score_start
+    cursor.rewind(Cursor.SELECTION_START)
     while (cursor.segment && cursor.tick < endTick) {
       if (cursor.tick >= startTick && 
         cursor.element && cursor.element.type == Element.CHORD) {
@@ -325,7 +326,6 @@ MuseScore {
           notesSequence.push({
             pitch: topNote.pitch,
             noteElement: topNote,
-            // chordElement: chord, // track parent for later
             tick: cursor.tick
           })
           // console.log("dbg : note added to seq | pitch=", topNote.pitch)
@@ -334,50 +334,81 @@ MuseScore {
       cursor.next()
     }
     // process
-    console.log("dbg : notes found=", notesSequence.length)
-    var textCount = 0
+    console.log("calcFinger : notes found=", notesSequence.length)
     // sequential evaluation loop
     for (var i = 0; i < notesSequence.length; i++) {
       var current = notesSequence[i]
       var note = current.noteElement
+      var prev = (i > 0) ? notesSequence[i - 1] : null
+      var next = (i < notesSequence.length - 1) ? notesSequence[i + 1] : null
+      // detect direction for closer-to rule parsing
+      var direction = 0 // 0=stable 1=higher note next -1=lower note next
+      if (next) {
+        if (next.pitch > current.pitch) direction = 1
+        else if (next.pitch < current.pitch) direction = -1
+      }
+      // lookahead to catch 3-note chromatic run
+      var isChromatic = (next && prev) &&
+        (Math.abs(current.pitch - prev.pitch) == 1 && 
+        Math.abs(next.pitch - current.pitch) == 1)
+      // run internal logic engines
       var existing = getExistingFinger(note)
       if (existing) {
         existing.visible = true
-      } else {
-        var prev = (i > 0) ? notesSequence[i - 1] : null
-        var next = (i < notesSequence.length - 1) ? notesSequence[i + 1] : null
-      // detect direction for closer-to rule parsing
-        var direction = 0 // 0=stable 1=higher note next -1=lower note next
-        if (next) {
-          if (next.pitch > current.pitch) direction = 1
-          else if (next.pitch < current.pitch) direction = -1
+        if (requestAlternate) {
+          // overwrite text with alternate fingering
+          existing.text = getFinger(current.pitch, direction, isChromatic,
+            requestAlternate, prev, next)
         }
-        // lookahead to catch 3-note chromatic run
-        var isChromatic = (next && prev) &&
-          (Math.abs(current.pitch - prev.pitch) == 1 && 
-          Math.abs(next.pitch - current.pitch) == 1)
-        // run internal logic engines
+      } else {
         var fingerText = newElement(Element.FINGERING)
-        fingerText.text = getFinger(current.pitch, direction, isChromatic, requestAlternate)
-        // console.log("dbg : applying to pitch ", current.pitch, 
-        //   "dir=", direction, "chromatic=", isChromatic)
+        fingerText.text = getFinger(current.pitch, direction, isChromatic,
+          requestAlternate, prev, next)
         // insert stacked fingerings onto score
         fingerText.placement = Placement.ABOVE
-        // console.log("-------- fingerText=", fingerText)
         note.add(fingerText)
-        // console.log("dbg : applied fingering=", fingerText)
-        textCount++
+        // console.log("calcFinger : applied fingering=", fingerText)
       }
     }
     curScore.endCmd()
-    console.log("calcFinger : textCount=", textCount)
   }
 
-  function getFinger(pitch, direction, isChromatic, requestAlternate) {
+  function getFinger(pitch, direction, isChromatic, requestAlternate, prev, next) {
+    console.log("getFinger : pitch=", pitch, " | direction=", direction,
+      " | isChromatic=", isChromatic, " | altenate=", requestAlternate,
+      " | prev=", prev, " | next=", next)
     var noteClass = pitch % 12 // 0=C 1=C# 2=D 3=d# etc
     var cFinger = "3" // default middle pivot
     var bFinger = "3"
-    // c system
+    // alternate logic : direction-based priority
+    if (requestAlternate) {
+      if (direction === 1) {
+        // next note is higher : priority fingers 4 & 5
+        cFinger = (noteClass % 2 === 0) ? "4" : "5"
+        bFinger = "4"
+      } else if (direction === -1) {
+        // next note is lower : priority fingers 2 & 3
+        cFinger = (noteClass % 2 === 0) ? "2" : "3"
+        bFinger = "2"
+      } else {
+        // no direction : last note : relation to previous note if available
+        if (prev) {
+          var interval = pitch - prev.pitch
+          if (interval > 0) {
+            cFinger = "5"
+            bFinger = "4"
+          } else {
+            cFinger = "2"
+            bFinger = "3"
+          }
+        } else {
+          cFinger = "1"
+          bFinger = "5"
+        } 
+      }
+      return cFinger + "\n" + bFinger
+    }
+    // base logic : populate
     if (noteClass === 0) {
       cFinger = "2" // president rule 2@C
       bFinger = "2"
@@ -399,10 +430,10 @@ MuseScore {
       // bFinger = () todo
     } else if (direction === -1) {
       cFinger = "2" // closer-to lower
-      bFinger = requestAlternate ? "1" : "2" // closer-to
+      bFinger = "2"
     } else if (direction === 1) {
       cFinger = "4" // closer-to higher
-      bFinger = requestAlternate ? "5" : "4" // closer-to
+      bFinger = "4"
     }
     return cFinger + "\n" + bFinger
   }
@@ -511,13 +542,13 @@ MuseScore {
       console.log("[addChordText] no firstNote : exiting ...")
       return
     }
-    console.log("[addChordText] firstNote=" + firstNote)
-    console.log("[addChordText] firstNote.track=" + firstNote.track)
+    console.log("addChordText : firstNote=" + firstNote)
+    console.log("addChordText : firstNote.track=" + firstNote.track)
 
     curScore.startCmd()
     var cursor = curScore.newCursor()
     cursor.track = showTreble ? 0 : 4 
-    console.log("[addChordText] cursor.track=" + cursor.track)
+    console.log("addChordText : cursor.track=" + cursor.track)
     cursor.rewind(1) 
     
     if (cursor.segment && cursor.tick !== firstNote.parent.parent.tick) {
@@ -690,21 +721,21 @@ MuseScore {
         CheckBox {
           id: fingerCbx
           text: qsTr("fingering")
-          ToolTip.text: qsTr("add or change fingering to treble part")
+          ToolTip.text: qsTr("add, change or hide fingering to treble part
+            double-click to trigger change - alternate fingering")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
           checked: showFingering
           onCheckedChanged: {
-            // console.log("dbg : checkbox=", checked)
             showFingering = checked
           }
           // detect double-click
           onClicked: {
             var currentTime = new Date().getTime()
-            console.log("dbg : checked=", checked)
+            // console.log("dbg : checked=", checked)
             if (checked) {
               // double-click timing
-              if (currentTime - lastClickTime < 500) {
+              if (currentTime - lastClickTime < doubleClickSpeed) {
                 console.log("onClicked : alternate fingering ...")
                 calcFinger(true) // request alternate fingering
               } else {
@@ -957,19 +988,3 @@ MuseScore {
     }
   }
 }
-// } 
-
-    // else {
-    //   var fbCursor = curScore.newCursor()
-    //   fbCursor.rewind(Cursor.SELECTION_START)
-    //   if (!fbCursor.segment) {
-    //     // console.log("dbg : no active segment at SELECTION_START")
-    //     return
-    //   }
-    //   if (fbCursor.measure) {
-    //     startTick = fbCursor.measure.firstSegment.tick
-    //     endTick = fbCursor.measure.lastSegment.tick
-    //   } else {
-    //     // console.log("calcFinger : nothing selected, cant do fingering")
-    //   }
-    // }
