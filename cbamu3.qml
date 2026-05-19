@@ -18,6 +18,7 @@ MuseScore {
   
   property bool showButtonboard: true 
   property int comboWidth: 110
+  property int buttonWidth: 90
   
   readonly property color highlight1b: "dodgerblue"
   readonly property color highlight2g: "darkgreen"
@@ -304,10 +305,15 @@ MuseScore {
     // var selectedLength = curScore.selection.elements.length
     // console.log("calcFinger : initial selectedLength=", selectedLength)
     if (!curScore || curScore.selection.elements.length === 0) return
+    var sel = curScore.selection
+    if (!sel.startSegment || !sel.endSegment) {
+      console.log("calcFinger : active selection has no proper start / end segments")
+      return
+    }
     // wrap into command
     curScore.startCmd()
-    var startTick = curScore.selection.startSegment.tick
-    var endTick = curScore.selection.endSegment.tick
+    var startTick = sel.startSegment.tick
+    var endTick = sel.endSegment.tick
     // console.log("calcFinger : selection start=", startTick, " | end=", endTick)
     // gather melody line data
     var notesSequence = []
@@ -573,23 +579,32 @@ MuseScore {
     width: parent.width
     height: parent.height
     anchors.fill: parent
-    
     Row { 
       id: row1
       height: 30 
       spacing: 4
       anchors.horizontalCenter: parent.horizontalCenter
       Button {
-        text: qsTr("get chord")
-        ToolTip.text: qsTr("get chord from selected notes - min 3\ncan be added to selected notes")
+        id: getChordBtn
+        height: 28
+        width: buttonWidth 
+        anchors.verticalCenter: parent.verticalCenter
+        ToolTip.text: qsTr("get chord from selected notes - min 3" + 
+          "\ncan be added to selected notes")
         ToolTip.visible: hovered
         ToolTip.delay: tooltipDelay 
         onClicked: getSelectedPitch()
+        contentItem: Text {
+          text: qsTr("get chord")
+          font.pixelSize: 14
+          horizontalAlignment: Text.AlignHCenter
+          verticalAlignment: Text.AlignVCenter
+        }
       }
       Label {
         id: foundChordLabel
         text: qsTr("none")
-        width: 114
+        width: 97
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font.pixelSize: 18
@@ -599,14 +614,22 @@ MuseScore {
         fontSizeMode: Text.Fit
       }
       Button {
-        text: qsTr("add as text")
+        id: addAsTextBtn
+        height: 28
+        width: buttonWidth 
+        anchors.verticalCenter: parent.verticalCenter
         ToolTip.text: qsTr("add identified chord to selected notes")
         ToolTip.visible: hovered
         ToolTip.delay: tooltipDelay 
         onClicked: addChordText()
+        contentItem: Text {
+          text: qsTr("add as text")
+          font.pixelSize: 14
+          horizontalAlignment: Text.AlignHCenter
+          verticalAlignment: Text.AlignVCenter
+        }
       }
     }
-    
     Rectangle {
       id: handleBackground
       width: parent.width
@@ -653,7 +676,8 @@ MuseScore {
           text: qsTr("MB") 
           checked: meloBassMode 
           onCheckedChanged: meloBassMode = checked
-          ToolTip.text: qsTr("present as melodic / free bass chord vs default stradella bass")
+          ToolTip.text: qsTr("present as melodic / free bass chord" + 
+            "vs default stradella bass")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
           // added
@@ -663,9 +687,7 @@ MuseScore {
             x: 0
             y: parent.height / 2 - height / 2
             radius: 3
-            // border.color: "lime"
-            color: "white" // highlight1b
-            // visible: meloBassCbx.checked
+            color: "white" 
             Rectangle {
               width: 10
               height: 10
@@ -674,14 +696,11 @@ MuseScore {
               visible: meloBassCbx.checked
             }
           } 
-          // }
           contentItem: Text {
             text: meloBassCbx.text
-            // text: parent.text
             color: "white"
-            font.pixelSize: 13
+            font.pixelSize: 15
             leftPadding: 20
-            // leftPadding: textLeftPadding 
             verticalAlignment: Text.AlignVCenter
           }
         }
@@ -700,14 +719,11 @@ MuseScore {
             x: 0
             y: parent.height / 2 - height / 2
             radius: 3
-            // border.color: "lime"
-            color: "white" //highlight1b 
+            color: "white"
             Rectangle {
               width: 10
               height: 10
               anchors.centerIn: parent
-              // x: 3
-              // y: 3
               radius: 2
               color: highlight1b
               visible: tonesCbx.checked
@@ -715,19 +731,17 @@ MuseScore {
           }
           contentItem: Text {
             text: tonesCbx.text
-            // text: parent.text
             color: "white"
-            font.pixelSize: 13
+            font.pixelSize: 15
             leftPadding: 20
-            // leftPadding: textLeftPadding
             verticalAlignment: Text.AlignVCenter
           }
         } 
         CheckBox {
           id: fingerCbx
           text: qsTr("fingering")
-          ToolTip.text: qsTr("add, change or hide fingering to treble part
-            double-click to trigger change - alternate fingering")
+          ToolTip.text: qsTr("add, change or hide fingering to treble part" +
+            "\ndouble-click to trigger change - alternate fingering")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
           checked: showFingering
@@ -760,14 +774,11 @@ MuseScore {
             x:0
             y: parent.height / 2 - height / 2
             radius: 3
-            // border.color: "lime"
-            color: "white" // highlight1b 
+            color: "white"
             Rectangle {
               width: 10
               height: 10
               anchors.centerIn: parent
-              // x: 3
-              // y: 3
               radius: 2
               color: highlight1b
               visible: fingerCbx.checked
@@ -775,11 +786,9 @@ MuseScore {
           }
           contentItem: Text {
             text: fingerCbx.text
-            // text: parent.text
             color: "white"
-            font.pixelSize: 13
+            font.pixelSize: 15
             leftPadding: 20
-            // leftPadding: textLeftPadding
             verticalAlignment: Text.AlignVCenter
           } 
         }
@@ -825,7 +834,8 @@ MuseScore {
           width: 52
           height: 28 // added
           currentIndex: 2 // set default model choice
-          ToolTip.text: qsTr("select bass 8ve\n24=5th | .. | 0=3rd | .. | -24=1st\nfor melodic / free bass only")
+          ToolTip.text: qsTr("select bass 8ve\n24=5th | .. | 0=3rd | .. | -24=1st" +
+            "\nfor melodic / free bass only")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
           model: [24, 12, 0, -12, -24]
