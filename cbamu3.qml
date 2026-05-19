@@ -9,7 +9,6 @@ MuseScore {
   version: "1.0"
   description: qsTr("chromatic button accordion")
   pluginType: "dialog"
-  // title: qsTr("chromatic button accordion plugin")
   width: 300
   height: 840 
   
@@ -278,20 +277,20 @@ MuseScore {
     curScore.startCmd()
     // create cursor for navigation of score
     var elements = curScore.selection.elements
-    var count = 0
+    // var count = 0
     for (var i = 0; i < elements.length; i++) {
       var note = elements[i]
       if (note.type != Element.NOTE) continue
       var existing = getExistingFinger(note)
       if (existing) {
         existing.visible = false
-        count++
+        // count++
       }
     }
     // console.log("hideFinger : endTick=", endTick)
     // end command
     curScore.endCmd()
-    console.log("hideFinger : count=", count)
+    // console.log("hideFinger : count=", count)
   }
 
   function getExistingFinger(note) {
@@ -309,7 +308,7 @@ MuseScore {
     curScore.startCmd()
     var startTick = curScore.selection.startSegment.tick
     var endTick = curScore.selection.endSegment.tick
-    console.log("calcFinger : selection start=", startTick, " | end=", endTick)
+    // console.log("calcFinger : selection start=", startTick, " | end=", endTick)
     // gather melody line data
     var notesSequence = []
     var cursor = curScore.newCursor()
@@ -334,7 +333,7 @@ MuseScore {
       cursor.next()
     }
     // process
-    console.log("calcFinger : notes found=", notesSequence.length)
+    // console.log("calcFinger : notes found=", notesSequence.length)
     // sequential evaluation loop
     for (var i = 0; i < notesSequence.length; i++) {
       var current = notesSequence[i]
@@ -374,9 +373,9 @@ MuseScore {
   }
 
   function getFinger(pitch, direction, isChromatic, requestAlternate, prev, next) {
-    console.log("getFinger : pitch=", pitch, " | direction=", direction,
-      " | isChromatic=", isChromatic, " | altenate=", requestAlternate,
-      " | prev=", prev, " | next=", next)
+    // console.log("getFinger : pitch=", pitch, " | direction=", direction,
+    //   " | isChromatic=", isChromatic, " | altenate=", requestAlternate,
+    //   " | prev=", prev, " | next=", next)
     var noteClass = pitch % 12 // 0=C 1=C# 2=D 3=d# etc
     var cFinger = "3" // default middle pivot
     var bFinger = "3"
@@ -732,19 +731,19 @@ MuseScore {
           // detect double-click
           onClicked: {
             var currentTime = new Date().getTime()
-            // console.log("dbg : checked=", checked)
-            if (checked) {
-              // double-click timing
-              if (currentTime - lastClickTime < doubleClickSpeed) {
-                console.log("onClicked : alternate fingering ...")
-                calcFinger(true) // request alternate fingering
-              } else {
+            // double-click timing
+            if (currentTime - lastClickTime < doubleClickSpeed) {
+              console.log("onClicked : alternate fingering ...")
+              checked = true // ensure it stays checked on 2nd click
+              calcFinger(true)
+            } else {
+              if (checked) {
                 console.log("onClicked : initial fingering ...")
                 calcFinger(false) // initial calculation
+              } else {
+                console.log("onClicked : hiding fingering")
+                hideFinger()
               }
-            } else {
-              console.log("onClicked : hiding fingering")
-              hideFinger()
             }
             lastClickTime = currentTime
           }
