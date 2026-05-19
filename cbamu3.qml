@@ -568,7 +568,7 @@ MuseScore {
     }
     curScore.endCmd()
   }
-  
+  // functions end
   Column { 
     id: mainWidget
     width: parent.width
@@ -626,7 +626,14 @@ MuseScore {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: showButtonboard = !showButtonboard
+        onClicked: {
+          showButtonboard = !showButtonboard
+          var targetHeight = showButtonboard ? 840 : 60
+          cbamu3plugin.height = targetHeight
+          if (Window.window) {
+            Window.window.height = targetHeight
+          }
+        }
       }
     }
     
