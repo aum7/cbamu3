@@ -268,148 +268,134 @@ MuseScore {
     bassActivePitches = tempBass
     }
   }
+
   function hideFinger() {
     console.log("dbg : inside hideFinger ...")
     // hide fingering markings on treble staff
     if (!curScore) return
-    var cursor = curScore.newCursor()
-    cursor.rewind(Cursor.SELECTION_START)
-    if (!cursor.segment) {
-      cursor.rewind(Cursor.SCORE_START)
-    }
-    var endTick = curScore.selection.endTick
-    var removedCount = 0
-    while (cursor.segment && (endTick == 0 || cursor.tick < endTick)) {
-      if (cursor.element && cursor.element.type == Element.CHORD) {
-        var chord = cursor.element
-        for (var i = 0; i < chord.notes.length; i++) {
-          var note = chord.notes[i]
-          // scan note elements for auto staff text
-          for (var j = note.elements.length -1; j >= 0; j--) {
-            var attached = note.elements[j]
-            if (attached.type == Element.STAFF_TEXT) {
-              if (attached.text.indexOf("\n") !== -1 && attached.placement == Placement.ABOVE) {
-                console.log("dbg : removing auto-fingering from note")
-                removeElement(attached)
-                removedCount++
-              }
-            }
-          }
-        }
+    // start command
+    curScore.startCmd()
+    // create cursor for navigation of score
+    var elements = curScore.selection.elements.length > 0 ?
+      curScore.selection.elements : getScoreNotes()
+    for (var i = 0; i < elements.length; i++) {
+      var note = elements[i]
+      if (note.type != Element.NOTE) continue
+      var existing = getExistingFinger(note)
+      if (existing) {
+        existing.visible = false
       }
-      if (cursor.element && cursor.element.type == Element.NOTE) {
-        console.log("dbg : found NOTE while deleting fingering")
+    }
+    // console.log("hideFinger : endTick=", endTick)
+    // end command
+    curScore.endCmd()
+    console.log("hideFinger : removed=", count)
+  }
+
+  function getExistingFinger(note) {
+    for (var i = 0; i < note.elements.length; i++) {
+      if (note.elements[i].type == Element.FINGERING) return note.elements[i]
+    }
+    return null
+  }
+
+  function getScoreNotes() {
+    var notes = []
+    var cursor = curScore.newCursor()
+    cursor.rewind(Cursor.SCORE_START)
+    while (cursor.segment) {
+      if (cursor.element && cursor.element.type == Element.CHORD) {
+        for (var i = 0; i < cursor.element.notes.length; i++) {
+          notes.push(cursor.element.notes[i])
+        }
       }
       cursor.next()
     }
+    return notes
   }
   function calcFinger(requestAlternate) {
     console.log("dbg : inside calcFinger, requestAlternate=", requestAlternate)
     if (!curScore) return
-    // added - cursor creation skipped
+    // wrap into command
+    curScore.startCmd()
     var startTick = 0
-    var endTick = 0
+    var endTick = curScore.lastSegment.tick
     // handle range selection
-    if (curScore.selection && curScore.selection.isRange) {
+    if (curScore.selection.isRange) {
+      console.log("calcFinger : isRange=", curScore.selection.isRange)
       startTick = curScore.selection.startSegment.tick
-      endTick = curScore.selection.endSegment ? 
-        curScore.selection.endSegment.tick : curScore.lastSegment.tick
-    } else if (curScore.selection && curScore.selection.elements.length > 0) {
-      // if element or full measure is selected but isnt technically a range
-      var firstElement = curScore.selection.elements[0]
-      var measure = firstElement.measure
-      if (measure) {
-        startTick = measure.firstSegment.tick
-        endTick = measure.lastSegment.tick + 1 // include final element
-      }
-    } else {
-      var fbCursor = curScore.newCursor()
-      fbCursor.rewind(Cursor.SELECTION_START)
-      if (!fbCursor.segment) {
-        console.log("dbg : no active segment at SELECTION_START")
-        return
-      }
-      if (fbCursor.measure) {
-        startTick = fbCursor.measure.firstSegment.tick
-        endTick = fbCursor.measure.lastSegment.tick
-      } else {
-        console.log("calcFinger : nothing selected, cant do fingering")
-      }
-    }
+      endTick = curScore.selection.endSegment.tick
+    } 
     console.log("dbg : selection start=", startTick, " | end=", endTick)
-    var cursor = curScore.newCursor()
-    cursor.staff = 0 // treble
-    cursor.voice = 0
-    cursor.rewind(Cursor.SCORE_START)
-    // fast forward
-    while (cursor.segment && cursor.tick < startTick) {
-      cursor.next()
-    }
     var notesSequence = []
     // gather melody line data
+    var cursor = curScore.newCursor()
+    cursor.rewind(Cursor.SCORE_START)
     while (cursor.segment && cursor.tick < endTick) {
-      if (cursor.element && cursor.element.type == Element.CHORD) {
+      if (cursor.tick >= startTick && 
+        cursor.element && cursor.element.type == Element.CHORD) {
         var chord = cursor.element
-        console.log("dbg : found chord at : ", cursor.tick, " | notes=", chord.notes.length)
+        // console.log("dbg : found chord at : ", cursor.tick, " | notes=", chord.notes.length)
         if (chord.notes.length > 0) {
           // top note
-          var topNote = chord.notes[chord.notes.length -1]
+          var topNote = chord.notes[chord.notes.length - 1]
           // focus on primary melody note : top one if chord
           notesSequence.push({
-            // pitch: chord.notes[chord.notes.length - 1].pitch,
-            // noteElement: chord.notes[chord.notes.length -1],
             pitch: topNote.pitch,
             noteElement: topNote,
+            // chordElement: chord, // track parent for later
             tick: cursor.tick
           })
-          console.log("dbg : note added to seq | pitch=", topNote.pitch)
+          // console.log("dbg : note added to seq | pitch=", topNote.pitch)
         }
-      }
-      if (cursor.element && cursor.element.type == Element.NOTE) {
-        console.log("dbg : found NOTE")
       }
       cursor.next()
     }
+    // process
     console.log("dbg : notes found=", notesSequence.length)
-    if (notesSequence.length === 0) return
-    // hide fingering todo ???
-    hideFinger()
+    if (notesSequence.length === 0) {
+      curScore.endCmd()
+      return
+    }
+    var textCount = 0
     // sequential evaluation loop
     for (var i = 0; i < notesSequence.length; i++) {
       var current = notesSequence[i]
-      var prev = (i > 0) ? notesSequence[i - 1] : null
-      var next = (i < notesSequence.length - 1) ? notesSequence[i + 1] : null
-      // skip process if manual fingering attached
-      if (hasManualFinger(current.noteElement)) {
-        console.log("dbg : manual fingering at ", current.tick)
-        continue
-      }
+      var note = current.noteElement
+      var existing = getExistingFinger(note)
+      if (existing) {
+        existing.visible = true
+      } else {
+        var prev = (i > 0) ? notesSequence[i - 1] : null
+        var next = (i < notesSequence.length - 1) ? notesSequence[i + 1] : null
       // detect direction for closer-to rule parsing
-      var direction = 0 // 0=stable 1=higher note next -1=lower note next
-      if (next) {
-        if (next.pitch > current.pitch) direction = 1
-        if (next.pitch < current.pitch) direction = -1
-      }
-      // lookahead to catch 3-note chromatic run
-      var isChromatic = false
-      if (next && prev) {
-        if (Math.abs(current.pitch - prev.pitch) == 1 && 
-          Math.abs(next.pitch - current.pitch) == 1) {
-          isChromatic = true
+        var direction = 0 // 0=stable 1=higher note next -1=lower note next
+        if (next) {
+          if (next.pitch > current.pitch) direction = 1
+          else if (next.pitch < current.pitch) direction = -1
         }
+        // lookahead to catch 3-note chromatic run
+        var isChromatic = (next && prev) &&
+          (Math.abs(current.pitch - prev.pitch) == 1 && 
+          Math.abs(next.pitch - current.pitch) == 1)
+        // run internal logic engines
+        var fingerText = newElement(Element.FINGERING)
+        fingerText.text = getFinger(current.pitch, direction, isChromatic, requestAlternate)
+        // console.log("dbg : applying to pitch ", current.pitch, 
+        //   "dir=", direction, "chromatic=", isChromatic)
+        // insert stacked fingerings onto score
+        fingerText.placement = Placement.ABOVE
+        // console.log("-------- fingerText=", fingerText)
+        // cursor.rewindToTick(current.tick)
+        note.add(fingerText)
+        // console.log("dbg : applied fingering=", fingerText)
+        textCount++
       }
-      // run internal logic engines
-      var fingerText = getFinger(current.pitch, direction, isChromatic, requestAlternate)
-      console.log("dbg : applying to pitch ", current.pitch, " | ", cFinger, " | ", bFinger)
-      // insert stacked fingerings onto score
-      // applyFingerText(current.noteElement, cFinger, bFinger)
-      var txtElement = newElement(Element.STAFF_TEXT)
-      txtElement.text = fingerText
-      txtElement.placement = Placement.ABOVE
-      current.noteElement.add(txtElement)
-      console.log("dbg : applied fingering")
     }
+    curScore.endCmd()
+    console.log("calcFinger : textCount=", textCount)
   }
+
   function getFinger(pitch, direction, isChromatic, requestAlternate) {
     var noteClass = pitch % 12 // 0=C 1=C# 2=D 3=d# etc
     var cFinger = "3" // default middle pivot
@@ -442,14 +428,6 @@ MuseScore {
       bFinger = requestAlternate ? "5" : "4" // closer-to
     }
     return cFinger + "\n" + bFinger
-  }
-  function hasManualFinger(noteElement) {
-    for (var i = 0; i < noteElement.elements.length; i++) {
-      if (noteElement.elements[i].type == Element.FINGERING) {
-        return true
-      }
-    }
-    return false
   }
   
   function mapButtonToMidi(row, col) {
@@ -750,14 +728,14 @@ MuseScore {
             if (checked) {
               // double-click timing
               if (currentTime - lastClickTime < 500) {
-                console.log("dbg : alternate fingering triggered")
+                console.log("onClicked : alternate fingering ...")
                 calcFinger(true) // request alternate fingering
               } else {
-                console.log("dbg : alternate fingering triggered")
+                console.log("onClicked : initial fingering ...")
                 calcFinger(false) // initial calculation
               }
             } else {
-              console.log("dbg : hiding fingering")
+              console.log("onClicked : hiding fingering")
               hideFinger()
             }
             lastClickTime = currentTime
@@ -1003,3 +981,18 @@ MuseScore {
   }
 }
 // } 
+
+    // else {
+    //   var fbCursor = curScore.newCursor()
+    //   fbCursor.rewind(Cursor.SELECTION_START)
+    //   if (!fbCursor.segment) {
+    //     // console.log("dbg : no active segment at SELECTION_START")
+    //     return
+    //   }
+    //   if (fbCursor.measure) {
+    //     startTick = fbCursor.measure.firstSegment.tick
+    //     endTick = fbCursor.measure.lastSegment.tick
+    //   } else {
+    //     // console.log("calcFinger : nothing selected, cant do fingering")
+    //   }
+    // }
