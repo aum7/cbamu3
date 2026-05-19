@@ -803,6 +803,7 @@ MuseScore {
           id: bassSelector
           width:comboWidth 
           height: 28 // added
+          font.pixelSize: 14
           ToolTip.text: qsTr("select bass layout")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
@@ -812,7 +813,7 @@ MuseScore {
           // added
           contentItem: Text {
             text:bassSelector.displayText
-            font.pixelSize: 12
+            // font.pixelSize: 14
             verticalAlignment: Text.AlignVCenter
             leftPadding: 4
             elide: Text.ElideRight
@@ -822,7 +823,7 @@ MuseScore {
             height: 25
             contentItem: Text {
               text: modelData.name
-              font.pixelSize: 12
+              // font.pixelSize: 14
               elide: Text.ElideRight
               verticalAlignment: Text.AlignVCenter
             }
@@ -833,6 +834,7 @@ MuseScore {
           id: octaveSelector
           width: 52
           height: 28 // added
+          font.pixelSize: 14
           currentIndex: 2 // set default model choice
           ToolTip.text: qsTr("select bass 8ve\n24=5th | .. | 0=3rd | .. | -24=1st" +
             "\nfor melodic / free bass only")
@@ -843,7 +845,7 @@ MuseScore {
           // added
           contentItem: Text {
             text: octaveSelector.displayText
-            font.pixelSize: 12
+            // font.pixelSize: 13
             verticalAlignment: Text.AlignVCenter
             leftPadding: 4
           }
@@ -852,7 +854,7 @@ MuseScore {
             height: 25
             contentItem: Text {
               text: modelData
-              font.pixelSize: 12
+              // font.pixelSize: 13
               verticalAlignment: Text.AlignVCenter
             }
             highlighted: octaveSelector.highlightedIndex === index
@@ -862,6 +864,7 @@ MuseScore {
           id: trebleSelector
           width: comboWidth
           height: 28
+          font.pixelSize: 14
           ToolTip.text: qsTr("select treble layout")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
@@ -871,7 +874,7 @@ MuseScore {
           // added
           contentItem: Text {
             text: trebleSelector.displayText
-            font.pixelSize: 12
+            // font.pixelSize: 14
             verticalAlignment: Text.AlignVCenter
             leftPadding: 4
             elide: Text.ElideRight
@@ -881,7 +884,7 @@ MuseScore {
             height: 25
             contentItem: Text {
               text: modelData.name
-              font.pixelSize: 12
+              // font.pixelSize: 14
               elide: Text.ElideRight
               verticalAlignment: Text.AlignVCenter
             }
