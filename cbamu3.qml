@@ -29,6 +29,8 @@ MuseScore {
   property bool meloBassMode: false
   property bool showButtonTones: true 
   property bool showFingering: false
+  // fingering checkbox double-click
+  property var lastClickTime: 0
   property bool showTreble: false
   
   property int bassOctaveShift
@@ -265,6 +267,110 @@ MuseScore {
     trebleActivePitches = tempTreble
     bassActivePitches = tempBass
     }
+  }
+  function hideFinger() {
+    // hide fingering markings on treble staff
+    if (!curScore) return
+    var cursor = curScore.newCursor()
+    cursor.rewind(Cursor.SELECTION_START)
+    if (!cursor.segment) {
+      cursor.rewind(Cursor.SCORE_START)
+    }
+    var endTick = curScore.selection.endTick
+    while (cursor.segment && (endTick == 0 || cursor.tick < endTick)) {
+      if (cursor.element && cursor.element.type == Element.CHORD) {
+        var chord = cursor.element
+        for (var i = 0; i < chord.notes.length; i++) {
+          var note = chord.notes[i]
+          // scan note elements for auto staff text
+          for (var j = note.elements.length -1; j >= 0; j--) {
+            var attached = note.elements[j]
+            if (attached.type == Element.STAFF_TEXT && attached.textStyleType ==
+              TextStyleType.STAFF) {
+              if (attached.text.indexOf("c:") === 0 || attached.text.indexOf("b:") === 0) {
+                removeElement(attached)
+              }
+            }
+          }
+        }
+      }
+      cursor.next()
+    }
+  }
+  function calcFinger(requestAlternate) {
+    if (!curScore) return
+    var cursor = curScore.newCursor()
+    cursor.rewind(Cursor.SELECTION_START)
+    if (!cursor.segment) return
+    var endTick = curScore.selection.endTick
+    var notesSequence = []
+    // gather melody line data
+    while (cursor.segment && cursor.tick < endTick) {
+      if (cursor.element && cursor.element.type == Element.CHORD) {
+        var chord = cursor.element
+        if (chord.notes.length > 0) {
+          // focus on primary melody note : top one if chord
+          notesSequence.push({
+            pitch: chord.notes[chord.notes.length - 1].pitch,
+            noteElement: chord.notes[chord.notes.length -1],
+            tick: cursor.tick
+          })
+        }
+      }
+      cursor.next()
+    }
+    if (notesSequence.length == 0) return
+    // hide fingering todo ???
+    hideFinger()
+    // sequential evaluation loop
+    for (var i = 0; i < notesSequence.length; i++) {
+      var current = notesSequence[i]
+      var prev = (i > 0) ? notesSequence[i - 1] : null
+      var next = (i < notesSequence.length - 1) ? notesSequence[i + 1] : null
+      // skip process if manual fingering attached
+      if (hasManualFinger(current.noteElement)) {
+        continue
+      }
+      // detect direction for closer-to rule parsing
+      var direction = 0 // 0=stable 1=higher note next -1=lower note next
+      if (next) {
+        if (next.pitch > current.pitch) direction = 1
+        if (next.pitch < current.pitch) direction = -1
+      }
+      // lookahead to catch 3-note chromatic run
+      var isChromatic = false
+      if (next && prev) {
+        if (Math.abs(current.pitch - prev.pitch) == 1 && 
+          Math.abs(next.pitch - current.pitch) == 1) {
+          isChromatic = true
+        }
+      }
+      // run internal logic engines
+      var cFinger = evaluateCsys(current.pitch, direction, isChromatic, requestAlternate)
+      var bFinger = evaluateBsys(current.pitch, direction, isChromatic, requestAlternate)
+      // insert stacked fingerings onto score
+      applyFingerText(current.noteElement, cFinger, bFinger)
+    }
+  }
+  function applyFingerText(noteElement, cText, bText) {
+    // top c fingering
+    var cTxtElement = newElement(Element.STAFF_TEXT)
+    cTxtElement.text = cText
+    cTxtElement.placement = Placement.ABOVE
+    noteElement.add(cTxtElement)
+    // bottom b fingering
+    var bTxtElement = newElement(Element.STAFF_TEXT)
+    bTxtElement.text = bText
+    bTxtElement.placement = Placement.ABOVE
+    noteElement.add(bTxtElement)
+  }
+  function hasManualFinger(noteElement) {
+    for (var i = 0; i < noteElement.elements.length; i++) {
+      if (noteElement.elements[i].type == Element.FINGERING) {
+        return true
+      }
+    }
+    return false
   }
   
   function mapButtonToMidi(row, col) {
@@ -557,6 +663,21 @@ MuseScore {
           ToolTip.delay: tooltipDelay 
           checked: showFingering
           onCheckedChanged: showFingering = checked
+          // detect double-click
+          onClicked: {
+            var currentTime = new Date().getTime()
+            if (checked) {
+              // double-click timing
+              if (currentTime - lastClickTime < 500) {
+                calcFinger(true) // request alternate fingering
+              } else {
+                calcFinger(false) // initial calculation
+              }
+            } else {
+              hideFinger()
+            }
+            lastClickTime = currentTime
+          }
           // added
           indicator: Rectangle {
             implicitWidth: 16
