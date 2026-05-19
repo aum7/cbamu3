@@ -10,7 +10,7 @@ MuseScore {
   description: qsTr("chromatic button accordion")
   pluginType: "dialog"
   width: 300
-  height: 840 
+  height: 820 
   
   onRun: {
     console.log("cba plugin started")
@@ -520,11 +520,11 @@ MuseScore {
   }
   
   function addChordText() {
-    var chord = foundChordLabel.text
-    if (!chord || 
-      chord === "none" || 
-      chord === "unknown" || 
-      chord.indexOf("select") !== -1) return
+    var chordFound = foundChordLabel.text
+    if (!chordFound || 
+      chordFound === "none" || 
+      chordFound === "unknown" || 
+      chordFound.indexOf("select") !== -1) return
     var selection = curScore.selection.elements
     if (selection.length === 0) {
       console.log("[addChordText] nothing selected : exiting ...")
@@ -543,28 +543,27 @@ MuseScore {
     }
     console.log("addChordText : firstNote=" + firstNote)
     console.log("addChordText : firstNote.track=" + firstNote.track)
-
+    // start command
     curScore.startCmd()
-    var cursor = curScore.newCursor()
-    cursor.track = showTreble ? 0 : 4 
-    console.log("addChordText : cursor.track=" + cursor.track)
-    cursor.rewind(1) 
-    
-    if (cursor.segment && cursor.tick !== firstNote.parent.parent.tick) {
-      var segment = firstNote.parent.parent
-      if (segment) {
-        var text = newElement(Element.STAFF_TEXT)
-        text.text = chord
-        segment.add(text)
-        curScore.endCmd()
-        return
-      }
-    }
-    
     var textObj = newElement(Element.STAFF_TEXT)
-    textObj.text = chord
-    if (cursor.segment) {
+    textObj.text = chordFound
+    var cursor = curScore.newCursor()
+    cursor.track = firstNote.track
+    console.log("addChordText : cursor.track=" + cursor.track)
+    cursor.rewind(0) 
+    var targetTick = firstNote.parent.parent.tick
+    // fast forward
+    while (cursor.segment && cursor.tick < targetTick) {
+      cursor.next()
+    }
+    // write to score
+    if (cursor.segment && cursor.tick === targetTick) {
       cursor.add(textObj)
+    } else {
+      // fallback
+      if (firstNote.parent) {
+        firstNote.parent.add(textObj)
+      }
     }
     curScore.endCmd()
   }
@@ -628,7 +627,7 @@ MuseScore {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
           showButtonboard = !showButtonboard
-          var targetHeight = showButtonboard ? 840 : 60
+          var targetHeight = showButtonboard ? 820 : 52
           cbamu3plugin.height = targetHeight
           if (Window.window) {
             Window.window.height = targetHeight
@@ -825,6 +824,7 @@ MuseScore {
           id: octaveSelector
           width: 52
           height: 28 // added
+          currentIndex: 2 // set default model choice
           ToolTip.text: qsTr("select bass 8ve\n24=5th | .. | 0=3rd | .. | -24=1st\nfor melodic / free bass only")
           ToolTip.visible: hovered
           ToolTip.delay: tooltipDelay 
