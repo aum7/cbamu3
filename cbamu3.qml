@@ -272,24 +272,25 @@ MuseScore {
   function hideFinger() {
     console.log("dbg : inside hideFinger ...")
     // hide fingering markings on treble staff
-    if (!curScore) return
+    if (!curScore || curScore.selection.elements.length === 0) return
     // start command
     curScore.startCmd()
     // create cursor for navigation of score
-    var elements = curScore.selection.elements.length > 0 ?
-      curScore.selection.elements : getScoreNotes()
+    var elements = curScore.selection.elements
+    var count = 0
     for (var i = 0; i < elements.length; i++) {
       var note = elements[i]
       if (note.type != Element.NOTE) continue
       var existing = getExistingFinger(note)
       if (existing) {
         existing.visible = false
+        count++
       }
     }
     // console.log("hideFinger : endTick=", endTick)
     // end command
     curScore.endCmd()
-    console.log("hideFinger : removed=", count)
+    console.log("hideFinger : count=", count)
   }
 
   function getExistingFinger(note) {
@@ -299,38 +300,19 @@ MuseScore {
     return null
   }
 
-  function getScoreNotes() {
-    var notes = []
-    var cursor = curScore.newCursor()
-    cursor.rewind(Cursor.SCORE_START)
-    while (cursor.segment) {
-      if (cursor.element && cursor.element.type == Element.CHORD) {
-        for (var i = 0; i < cursor.element.notes.length; i++) {
-          notes.push(cursor.element.notes[i])
-        }
-      }
-      cursor.next()
-    }
-    return notes
-  }
   function calcFinger(requestAlternate) {
-    console.log("dbg : inside calcFinger, requestAlternate=", requestAlternate)
-    if (!curScore) return
+    var selectedRange = curScore.selection.elements.length
+    console.log("calcFinger : selected=", selectedRange, " | requestAlternate=", requestAlternate)
+    if (!curScore || curScore.selection.elements.length === 0) return
     // wrap into command
     curScore.startCmd()
-    var startTick = 0
-    var endTick = curScore.lastSegment.tick
-    // handle range selection
-    if (curScore.selection.isRange) {
-      console.log("calcFinger : isRange=", curScore.selection.isRange)
-      startTick = curScore.selection.startSegment.tick
-      endTick = curScore.selection.endSegment.tick
-    } 
-    console.log("dbg : selection start=", startTick, " | end=", endTick)
-    var notesSequence = []
+    var startTick = curScore.selection.startSegment.tick
+    var endTick = curScore.selection.endSegment.tick
+    console.log("calcFinger : selection start=", startTick, " | end=", endTick)
     // gather melody line data
+    var notesSequence = []
     var cursor = curScore.newCursor()
-    cursor.rewind(Cursor.SCORE_START)
+    cursor.rewind(Cursor.SELECTION_START) // todo score_start
     while (cursor.segment && cursor.tick < endTick) {
       if (cursor.tick >= startTick && 
         cursor.element && cursor.element.type == Element.CHORD) {
@@ -353,10 +335,6 @@ MuseScore {
     }
     // process
     console.log("dbg : notes found=", notesSequence.length)
-    if (notesSequence.length === 0) {
-      curScore.endCmd()
-      return
-    }
     var textCount = 0
     // sequential evaluation loop
     for (var i = 0; i < notesSequence.length; i++) {
@@ -386,7 +364,6 @@ MuseScore {
         // insert stacked fingerings onto score
         fingerText.placement = Placement.ABOVE
         // console.log("-------- fingerText=", fingerText)
-        // cursor.rewindToTick(current.tick)
         note.add(fingerText)
         // console.log("dbg : applied fingering=", fingerText)
         textCount++
